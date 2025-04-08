@@ -9,7 +9,6 @@ use std::{
     type_name::{Self, TypeName},
 };
 
-use catch_that_cow::calf::{AdminCap};
 
 //=======Structs=======//
 public struct PoolState has key {
@@ -22,12 +21,8 @@ public struct Pool<phantom T> has key {
     balance: Balance<T>,
 }
 
-fun init(ctx: &mut TxContext) {
-    let state =PoolState {
-        id: object::new(ctx),
-        pools: table::new(ctx),
-    };
-    transfer::share_object(state);
+public struct AdminCap has key,store{
+    id: UID
 }
 
 //======Const=======//
@@ -51,6 +46,19 @@ public struct PoolDeposit has copy, drop {
 }
 
 //======functions=======//
+
+fun init(ctx: &mut TxContext) {
+    
+    let state =PoolState {
+        id: object::new(ctx),
+        pools: table::new(ctx),
+    };
+    let deployer = ctx.sender();
+    // 创建管理员权限凭证
+    let admin_cap = AdminCap { id: object::new(ctx) };
+    transfer::public_transfer(admin_cap, deployer);
+    transfer::share_object(state);
+}
 
 public fun create_pool<T: drop>(_: &AdminCap, ctx: &mut TxContext, state: &mut PoolState) {
     let type_name = type_name::get<T>();

@@ -7,6 +7,7 @@ use sui::{
     token::{Self, Token,TokenPolicy},
     coin::{Self, Coin},
     sui::SUI,
+    random::{Self, Random},
     };
 use catch_that_cow::pool::{Pool,PoolState, add_to_balance};
 
@@ -14,19 +15,15 @@ use catch_that_cow::pool::{Pool,PoolState, add_to_balance};
 const EPofileExist :u64 = 0;
 const ERopeNumberEnough :u64 = 1;
 const E_ALREADY_CLAIMED_TODAY: u64 = 2;
+
+
 //=======Structs=======//
+// One-Time-Witness for the module
+public struct GAME has drop {}
+
 public struct AdminCap has key, store {
     id: UID,
 }
-
-public struct Cow has key,store{
-    id: UID,
-    name: String,
-    reward: u64,
-    difficulty: u64,
-    speed: u64,
-}
-
 
 public struct Player has key,store{
     id: UID,
@@ -42,12 +39,6 @@ public struct State has key{
     players: vector<address>,
 }
 
-public struct CowPool has key, store {
-    id: UID,
-    cow: vector<Cow>
-}
-
-
 
 //========Events========//
 
@@ -56,9 +47,17 @@ public struct PlayerCreated has copy, drop {
     name: String,
 }
 
+/*
+reward:1-15,
+difficulty:1-4,
+*/
+public struct RewardEvent has copy, drop {
+    token_reward: u64,
+    timestamp: u64
+}
 
 //========Functions=======//
-fun init (ctx: &mut TxContext) {
+fun init (_: GAME,ctx: &mut TxContext) {
     let deployer = ctx.sender();
     // 创建管理员权限凭证
     let admin_cap = AdminCap { id: object::new(ctx) };
@@ -107,7 +106,11 @@ public entry fun create_player(
 
 //==========player========//
 
-//每次升级花费2个token
+/* 按下N次按钮就调用一次这个函数？
+    使用Token还是仅仅每次消耗gas?
+ */
+
+//每次升级花费1个token
 public fun upgrade_rope(
     mut payment: Token<CALF>,
     token_policy: &mut TokenPolicy<CALF>,
@@ -164,5 +167,61 @@ public fun add_rope<T>(
     player.rope_number = player.rope_number + 1;
 }
 
+//======game======//
 
+/*针对每次出绳的战斗*/
+public entry fun random_battle(
+    player: &mut Player,
+    token_cap: &mut CALFTokenCap,
+    random: &Random,
+    ctx: &mut TxContext
+) {
+    // 获取当前时间戳
+    let current_time = tx_context::epoch_timestamp_ms(ctx);
 
+    // 动态调整奖励范围
+    let base_reward = 1 + player.rope_number; // 最小奖励随套绳数量增加
+    let max_reward = 5 + player.rope_number * 2; // 最大奖励随套绳数量增加
+
+    // 动态调整难度
+    let difficulty = 3 + player.rope_number; // 难度随套绳数量增加
+
+    // 创建随机数生成器
+    let mut rand_generator = random::new_generator(random, ctx);
+    // 生成随机数
+    let random_value = random::generate_u64_in_range(&mut rand_generator, 0, 100); // 生成 0-99 的随机数
+
+    // 根据随机数判断战斗结果
+    let success_threshold = 35 + difficulty * 5; // 难度越高，成功阈值越高,获奖的基础概率为50
+    let is_success = random_value > success_threshold;
+
+    // 根据战斗结果和随机数分配奖励
+    let token_reward = if (!is_success) {
+        0 // 如果战斗失败，奖励为 0
+        } else if (random_value < 40) {
+            base_reward // 40% 概率只获得基础奖励
+        } else if (random_value < 70 ){
+            base_reward + difficulty // 30% 概率获得基础奖励 + 难度
+        } else if (random_value < 90) {
+            base_reward + difficulty * 2 // 20% 概率获得更高奖励
+        } else {
+            max_reward // 10% 概率获得最大奖励
+    };
+
+    // mint 奖励 token（仅当奖励大于 0 时）
+    if (token_reward > 0) {
+        calf::mint(token_cap, token_reward, ctx);
+    };
+
+    // 更新玩家状态
+    player.allReward = player.allReward + token_reward;
+    player.game_number = player.game_number + 1;
+
+    // 重置玩家的套绳数量为 1
+    player.rope_number = 1;
+    // 触发奖励事件
+    emit(RewardEvent {
+        token_reward,
+        timestamp: current_time,
+    });
+}
