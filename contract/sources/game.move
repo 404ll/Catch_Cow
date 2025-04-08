@@ -106,6 +106,7 @@ public entry fun create_player(
 
 //==========player========//
 
+//TODO
 /* 按下N次按钮就调用一次这个函数？
     使用Token还是仅仅每次消耗gas?
  */
@@ -169,6 +170,7 @@ public fun add_rope<T>(
 
 //======game======//
 
+//TODO
 /*针对每次出绳的战斗*/
 public entry fun random_battle(
     player: &mut Player,
@@ -181,7 +183,7 @@ public entry fun random_battle(
 
     // 动态调整奖励范围
     let base_reward = 1 + player.rope_number; // 最小奖励随套绳数量增加
-    let max_reward = 5 + player.rope_number * 2; // 最大奖励随套绳数量增加
+    let max_reward = 5 ; // 最大奖励随套绳数量增加
 
     // 动态调整难度
     let difficulty = 3 + player.rope_number; // 难度随套绳数量增加
@@ -201,11 +203,12 @@ public entry fun random_battle(
         } else if (random_value < 40) {
             base_reward // 40% 概率只获得基础奖励
         } else if (random_value < 70 ){
-            base_reward + difficulty // 30% 概率获得基础奖励 + 难度
+            // 30%动态生成奖励值，范围在 base_reward 到 max_reward 之间
+            random::generate_u64_in_range(&mut rand_generator, base_reward, max_reward)
         } else if (random_value < 90) {
             base_reward + difficulty * 2 // 20% 概率获得更高奖励
         } else {
-            max_reward // 10% 概率获得最大奖励
+            max_reward + player.rope_number// 10% 概率获得最大奖励
     };
 
     // mint 奖励 token（仅当奖励大于 0 时）
