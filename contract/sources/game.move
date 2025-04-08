@@ -8,7 +8,7 @@ use sui::{
     coin::{Self, Coin},
     sui::SUI,
     };
-use catch_that_cow::pool::{Pool, add_to_balance};
+use catch_that_cow::pool::{Pool,PoolState, add_to_balance};
 
 //=======const=========//
 const EPofileExist :u64 = 0;
@@ -153,13 +153,14 @@ public fun add_rope<T>(
     payment: &mut Coin<T>,
     player: &mut Player,
     pool: &mut Pool<T>,
+    pool_state: &mut PoolState,
     ctx: &mut TxContext,
     ){
     assert!(player.rope_number < 3, ERopeNumberEnough);
     let amount = 1/2;
     let into_coin = coin::split(payment, amount, ctx);
-    let into_balance = coin::into_balance(into_coin);
-    add_to_balance(pool, into_balance);
+
+    add_to_balance(pool, into_coin,pool_state);
     player.rope_number = player.rope_number + 1;
 }
 

@@ -45,6 +45,10 @@ public struct PoolWithdraw has copy, drop {
     amount: u64,
 }
 
+public struct PoolDeposit has copy, drop {
+    pool_id: ID,
+    amount: u64,
+}
 
 //======functions=======//
 
@@ -91,8 +95,20 @@ public fun withdraw_by_admin<T>(
 }
 
 public fun add_to_balance<T>(
-    pool: &mut Pool<T>,
-    amount: Balance<T>
+    pool: &mut Pool<T>, coin: Coin<T>, state: &mut PoolState
 ) {
-    balance::join(&mut pool.balance, amount);
+    let amount = coin::value(&coin);
+    let balance = coin::into_balance(coin);
+    balance::join(&mut pool.balance, balance);
+    let pool_id = pool.id.to_inner();
+    let type_name = type_name::get<T>();
+    assert!(table::contains(&state.pools, type_name), ERROR_POOL_NOT_FOUND);
+    let pool_amount = table::borrow_mut(&mut state.pools, type_name);
+    *pool_amount = *pool_amount + amount;
+    
+    emit(PoolDeposit {
+        pool_id,
+        amount,
+    });
 }
+
