@@ -5,15 +5,15 @@ use std::string::{Self,String};
 use sui::{
     event::emit,
     token::{Self, Token,TokenPolicy},
-    balance::{Self, Balance},
+    coin::{Self, Coin},
+    sui::SUI,
     };
-
+use catch_that_cow::pool::{Pool, add_to_balance};
 
 //=======const=========//
 const EPofileExist :u64 = 0;
 const ERopeNumberEnough :u64 = 1;
 const E_ALREADY_CLAIMED_TODAY: u64 = 2;
-
 //=======Structs=======//
 public struct AdminCap has key, store {
     id: UID,
@@ -27,18 +27,13 @@ public struct Cow has key,store{
     speed: u64,
 }
 
-public struct Rope has key,store{
-    id: UID,
-    level: u64,
-    number: u64
-}
 
 public struct Player has key,store{
     id: UID,
     name: String,
     allReward: u64,
     game_number:u64,
-    rope: Rope,
+    rope_number: u64,
     last_mint_token_time: u64
 }
 
@@ -47,15 +42,11 @@ public struct State has key{
     players: vector<address>,
 }
 
-public struct Pool<T> has key{
+public struct CowPool has key, store {
     id: UID,
-    balance: Balance<T>
+    cow: vector<Cow>
 }
 
-public struct CowPool has key,store{
-    id: UID,
-    cow: Cow
-}
 
 
 //========Events========//
@@ -89,7 +80,6 @@ public entry fun create_player(
     ){
     let user = tx_context::sender(ctx);
     let player_uid = object::new(ctx);
-    let rope_uid = object::new(ctx);
 
     let id = player_uid.to_inner();
     assert!(
@@ -97,18 +87,12 @@ public entry fun create_player(
         EPofileExist
     );
 
-    let rope = Rope {
-        id: rope_uid,
-        level: 1,
-        number: 0
-    };
-
     let player = Player {
         id:player_uid,
         name,
         allReward: 0,
         game_number: 0,
-        rope,
+        rope_number: 0,
         last_mint_token_time: tx_context::epoch_timestamp_ms(ctx)
     };
     transfer::transfer(player, user);
@@ -121,10 +105,11 @@ public entry fun create_player(
     });
 }
 
+//==========player========//
+
 //每次升级花费2个token
 public fun upgrade_rope(
     mut payment: Token<CALF>,
-    player: &mut Player,
     token_policy: &mut TokenPolicy<CALF>,
     ctx: &mut TxContext,
     ){
@@ -142,7 +127,6 @@ public fun upgrade_rope(
 
     // 支付 token
     calf::spend(payment, token_policy, 2, ctx);
-    player.rope.level = player.rope.level + 1;
 }
 
 //每日领取Token
@@ -165,25 +149,19 @@ public fun daily_claim(
 }
 
 //每次增加套绳花费0.5个Coin
-public fun add_rope(
-    // coin: SUI,
+public fun add_rope<T>(
+    payment: &mut Coin<T>,
     player: &mut Player,
+    pool: &mut Pool<T>,
     ctx: &mut TxContext,
     ){
-    assert!(player.rope.number > 4, ERopeNumberEnough);
-    player.rope.number = player.rope.number + 1;
+    assert!(player.rope_number < 3, ERopeNumberEnough);
+    let amount = 1/2;
+    let into_coin = coin::split(payment, amount, ctx);
+    let into_balance = coin::into_balance(into_coin);
+    add_to_balance(pool, into_balance);
+    player.rope_number = player.rope_number + 1;
 }
 
-//========admin========//
 
-public entry fun create_pool<T:drop+store>(
-    _: &AdminCap,
-    ctx: &mut TxContext,
-){
-    let pool = Pool<T> {
-        id: object::new(ctx),
-        balance: balance::zero(),
-    };
-    transfer::share_object(pool);
-}
 
